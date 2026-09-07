@@ -100,7 +100,11 @@ fi
 
 echo "Building Ragham iOS $VERSION (build $BUILD_NUMBER)"
 echo "  shell points at: $SERVER_URL"
-xcodebuild -version | head -1
+# Not `| head -1`: head closes the pipe, and xcodebuild turns the resulting
+# SIGPIPE into an uncaught NSException and aborts with 134, which pipefail then
+# reads as a failed build before one has started.
+XCODE_VERSION="$(xcodebuild -version)"
+echo "${XCODE_VERSION%%$'\n'*}"
 echo
 
 # Writes ios/App/App/capacitor.config.json, which is what the app actually reads
