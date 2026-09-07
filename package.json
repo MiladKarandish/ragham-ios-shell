@@ -1,0 +1,21 @@
+{
+  "name": "ragham-ios-shell",
+  "version": "2.22.29",
+  "private": true,
+  "description": "Build inputs for the Ragham iOS shell. Generated — see README.md.",
+  "scripts": {
+    "ios:check": "python3 scripts/ios-preflight.py",
+    "ios:archive": "./scripts/ios-archive.sh"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/ios": "^8.5.1"
+  }
+}

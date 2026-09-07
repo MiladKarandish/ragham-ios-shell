@@ -1,0 +1,48 @@
+name: Build unsigned iOS shell
+
+# Free macOS minutes are what this repo is for. Keep it public, or the runner
+# starts costing money at 10x the Linux rate.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which site the shell should load
+        type: choice
+        default: production
+        options: [production, stage]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    # Pinned, not macos-latest: a runner-image bump moves Xcode a major version
+    # under us, and this build is meant to be reproducible for a market that
+    # re-signs it. Bump deliberately.
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Build the unsigned .ipa
+        env:
+          # Baked at export time from the webapp repo's commit count. This repo's
+          # own history restarts, and the build number must never go backwards.
+          IOS_BUILD_NUMBER: "2190"
+        run: |
+          if [ "${{ inputs.target }}" = "stage" ]; then
+            ./scripts/ios-archive.sh --stage
+          else
+            ./scripts/ios-archive.sh
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ragham-ios-${{ github.run_number }}
+          path: dist/ios/*.ipa
+          if-no-files-found: error
