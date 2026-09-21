@@ -5,8 +5,8 @@ set -euo pipefail
 # Usage: ./scripts/ios-simulator-check.sh [--stage | --server-url URL] [--device NAME]
 #
 # Boots an iPhone simulator, installs the shell and exercises what only exists at
-# runtime: does it launch, does the site paint, does it survive a relaunch, does a
-# push payload arrive without crashing it. Screenshots land in dist/ios-sim/.
+# runtime: does it launch, does the site paint, does it survive a relaunch.
+# Screenshots land in dist/ios-sim/.
 # See docs/architecture/ios-app.md.
 #
 # A simulator build is never signed, so this needs macOS but no certificate,
@@ -14,11 +14,10 @@ set -euo pipefail
 # exists, and is the only verification available without borrowing an iPhone.
 #
 # What it cannot do, and no simulator can:
-#   - APNs registration. `simctl push` injects a payload locally; it does not
-#     mint a device token, so the `registerForPush()` fork stays unverified.
-#   - A notification *tap*. The payload is delivered, but nothing can tap the
-#     banner from a CLI, so `data.link` -> toNotificationPath() is still only
-#     covered by src/native/routing.test.ts.
+#   - Anything about push. `simctl push` delivers a payload, but iOS shows
+#     nothing without notification permission, and that is only requested inside
+#     registerForPush() after login — which CI cannot do. A push step here is
+#     indistinguishable from a no-op, so there isn't one.
 #   - A cold deep link. `simctl openurl` raises iOS's "Open in ...?" prompt and
 #     nothing can tap it, so consumeLaunchUrl() stays unverified — the step only
 #     proves the scheme is registered to this app. It runs LAST because that
@@ -149,19 +148,30 @@ xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$UDID" -b
 xcrun simctl install "$UDID" "$APP_PATH"
 
+PREV_SHOT=""
+
 shoot() {
   local name="$1"
-  xcrun simctl io "$UDID" screenshot "$OUT_DIR/$name.png" >/dev/null 2>&1
-  # A white screen is the failure this whole script exists to catch, and it
-  # compresses to almost nothing next to a rendered page.
+  local path="$OUT_DIR/$name.png"
+  xcrun simctl io "$UDID" screenshot "$path" >/dev/null 2>&1
+
   local bytes
-  bytes="$(stat -f%z "$OUT_DIR/$name.png" 2>/dev/null || echo 0)"
+  bytes="$(stat -f%z "$path" 2>/dev/null || echo 0)"
   printf '  %-22s %7s bytes' "$name.png" "$bytes"
+
+  # A white screen is the failure this script exists to catch, and it compresses
+  # to almost nothing next to a rendered page.
   if [ "$bytes" -lt 20000 ]; then
     echo "  ⚠️  suspiciously blank"
+  # Byte-identical to the shot before it means the step changed nothing on
+  # screen. That is how a step can pass while proving nothing, so say it loudly.
+  elif [ -n "$PREV_SHOT" ] && cmp -s "$PREV_SHOT" "$path"; then
+    echo "  ⚠️  identical to $(basename "$PREV_SHOT") — step changed nothing"
   else
     echo
   fi
+
+  PREV_SHOT="$path"
 }
 
 echo
@@ -171,25 +181,12 @@ sleep 12
 shoot "01-launch"
 
 echo
-echo "Push payload delivery"
-cat > "$OUT_DIR/payload.apns" <<JSON
-{
-  "Simulator Target Bundle": "$BUNDLE_ID",
-  "aps": { "alert": { "title": "تست", "body": "اعلان آزمایشی" }, "sound": "default" },
-  "data": { "link": "/invoices" }
-}
-JSON
-xcrun simctl push "$UDID" "$BUNDLE_ID" "$OUT_DIR/payload.apns" >/dev/null
-sleep 5
-shoot "02-push-delivered"
-
-echo
 echo "Relaunch (cookie persistence across a cold start)"
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 sleep 2
 xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null
 sleep 10
-shoot "03-relaunch"
+shoot "02-relaunch"
 
 echo
 echo "URL scheme registration ($DEEP_LINK)"
@@ -201,11 +198,11 @@ xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 sleep 2
 xcrun simctl openurl "$UDID" "$DEEP_LINK"
 sleep 6
-shoot "04-scheme-prompt"
+shoot "03-scheme-prompt"
 
 echo
 echo "✅ Screenshots: $OUT_DIR/"
 echo
-echo "01 and 03 prove the shell runs and paints. 04 only proves the scheme is"
-echo "registered — a cold deep link, push registration and a signed install all"
-echo "still need a real device. See docs/architecture/ios-app.md."
+echo "01 and 02 prove the shell runs and paints. 03 only proves the scheme is"
+echo "registered — a cold deep link, anything about push, and a signed install"
+echo "all still need a real device. See docs/architecture/ios-app.md."
