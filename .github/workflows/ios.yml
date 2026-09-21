@@ -33,7 +33,7 @@ jobs:
         env:
           # Baked at export time from the webapp repo's commit count. This repo's
           # own history restarts, and the build number must never go backwards.
-          IOS_BUILD_NUMBER: "2190"
+          IOS_BUILD_NUMBER: "2191"
         run: |
           if [ "${{ inputs.target }}" = "stage" ]; then
             ./scripts/ios-archive.sh --stage
@@ -46,3 +46,34 @@ jobs:
           name: ragham-ios-${{ github.run_number }}
           path: dist/ios/*.ipa
           if-no-files-found: error
+
+  # Independent of the .ipa: a simulator build is unsigned, so this is the only
+  # verification available while the team has neither a Mac nor an iPhone.
+  simulator:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Launch the shell on a simulator
+        run: |
+          if [ "${{ inputs.target }}" = "stage" ]; then
+            ./scripts/ios-simulator-check.sh --stage
+          else
+            ./scripts/ios-simulator-check.sh
+          fi
+
+      # Uploaded even on failure: a crash on launch is exactly when the
+      # screenshots are worth looking at.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragham-ios-screenshots-${{ github.run_number }}
+          path: dist/ios-sim/*.png
+          if-no-files-found: warn
