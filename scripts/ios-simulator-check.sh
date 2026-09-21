@@ -5,8 +5,8 @@ set -euo pipefail
 # Usage: ./scripts/ios-simulator-check.sh [--stage | --server-url URL] [--device NAME]
 #
 # Boots an iPhone simulator, installs the shell and exercises what only exists at
-# runtime: does it launch, does the site paint, does a cold deep link land, does a
-# push payload get handled without crashing. Screenshots land in dist/ios-sim/.
+# runtime: does it launch, does the site paint, does it survive a relaunch, does a
+# push payload arrive without crashing it. Screenshots land in dist/ios-sim/.
 # See docs/architecture/ios-app.md.
 #
 # A simulator build is never signed, so this needs macOS but no certificate,
@@ -19,6 +19,10 @@ set -euo pipefail
 #   - A notification *tap*. The payload is delivered, but nothing can tap the
 #     banner from a CLI, so `data.link` -> toNotificationPath() is still only
 #     covered by src/native/routing.test.ts.
+#   - A cold deep link. `simctl openurl` raises iOS's "Open in ...?" prompt and
+#     nothing can tap it, so consumeLaunchUrl() stays unverified — the step only
+#     proves the scheme is registered to this app. It runs LAST because that
+#     prompt stays on screen and would otherwise sit over every later shot.
 #   - Prove a signed .ipa installs on hardware. Different code path entirely.
 
 SERVER_URL="https://web.raghamapp.com"
@@ -167,17 +171,6 @@ sleep 12
 shoot "01-launch"
 
 echo
-echo "Cold deep link ($DEEP_LINK)"
-# Terminated first on purpose: appUrlOpen only fires while the shell already
-# runs, so a link that *launches* the app goes through consumeLaunchUrl(), and
-# that is the path with no test coverage and the easy bug.
-xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
-sleep 2
-xcrun simctl openurl "$UDID" "$DEEP_LINK"
-sleep 10
-shoot "02-deeplink-cold"
-
-echo
 echo "Push payload delivery"
 cat > "$OUT_DIR/payload.apns" <<JSON
 {
@@ -188,7 +181,7 @@ cat > "$OUT_DIR/payload.apns" <<JSON
 JSON
 xcrun simctl push "$UDID" "$BUNDLE_ID" "$OUT_DIR/payload.apns" >/dev/null
 sleep 5
-shoot "03-push-delivered"
+shoot "02-push-delivered"
 
 echo
 echo "Relaunch (cookie persistence across a cold start)"
@@ -196,10 +189,23 @@ xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 sleep 2
 xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null
 sleep 10
-shoot "04-relaunch"
+shoot "03-relaunch"
+
+echo
+echo "URL scheme registration ($DEEP_LINK)"
+# Last, and deliberately so: this raises an "Open in ...?" prompt that nothing
+# can dismiss, and it would sit over every screenshot taken after it. A shot
+# showing that prompt naming this app is the whole result — iOS resolved the
+# scheme to us. Whether consumeLaunchUrl() then routes correctly needs a device.
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+sleep 2
+xcrun simctl openurl "$UDID" "$DEEP_LINK"
+sleep 6
+shoot "04-scheme-prompt"
 
 echo
 echo "✅ Screenshots: $OUT_DIR/"
 echo
-echo "These prove the shell runs and paints. Push registration and a signed"
-echo "install still need a real device — see docs/architecture/ios-app.md."
+echo "01 and 03 prove the shell runs and paints. 04 only proves the scheme is"
+echo "registered — a cold deep link, push registration and a signed install all"
+echo "still need a real device. See docs/architecture/ios-app.md."
