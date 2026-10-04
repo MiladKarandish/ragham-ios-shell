@@ -21,7 +21,10 @@ const config: CapacitorConfig = {
 
   server: {
     url: SERVER_URL,
-    cleartext: false,
+    // Only ever true for an http dev server on the LAN. ATS still refuses
+    // cleartext to the internet — `NSAllowsLocalNetworking` in Info.plist
+    // narrows the exception to local addresses.
+    cleartext: SERVER_URL.startsWith("http://"),
   },
 
   ios: {

@@ -1,11 +1,12 @@
 {
   "name": "ragham-ios-shell",
-  "version": "2.22.29",
+  "version": "2.24.2",
   "private": true,
   "description": "Build inputs for the Ragham iOS shell. Generated — see README.md.",
   "scripts": {
     "ios:check": "python3 scripts/ios-preflight.py",
-    "ios:archive": "./scripts/ios-archive.sh"
+    "ios:archive": "./scripts/ios-archive.sh",
+    "ios:sim": "./scripts/ios-simulator-check.sh"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

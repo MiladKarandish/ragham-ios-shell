@@ -39,6 +39,11 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>برای اسکن بارکد چک و ثبت تصویر، به دوربین دستگاه نیاز است.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
